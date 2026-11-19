@@ -1,0 +1,6 @@
+# Local editor/agent settings
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db

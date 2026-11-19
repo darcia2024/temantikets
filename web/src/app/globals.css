@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* Temantiket brand, taken from instagram.com/temantiket.co and voatemantiket.site */
+@theme inline {
+  --font-sans: var(--font-jakarta);
+  --font-display: var(--font-barlow);
+  --font-mono: var(--font-geist-mono);
+
+  /* Sky blue palette (owner's choice: lighter than the royal blue on IG posts) */
+  --color-brand-50: #eef9fe;
+  --color-brand-100: #d7f0fb;
+  --color-brand-200: #afe1f6;
+  --color-brand-500: #1fa8e0; /* sky blue: accents, highlights */
+  --color-brand-600: #0c94d3; /* buttons, logo on light backgrounds */
+  --color-brand-700: #0a6ea3; /* deep sky: headlines, readable on white */
+  --color-brand-800: #08557e;
+  --color-sky-brand: #5cc8f0; /* light end of gradients */
+  --color-sky-soft: #bde6f8;
+  --color-ink: #0c1a34; /* navy text */
+  --color-canvas: #f4f9fd;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+input,
+select,
+textarea {
+  font-size: 16px; /* stops iOS zooming into fields */
+}
+
+/* Sky gradient used on public pages, like the Instagram post backgrounds */
+.bg-sky-hero {
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(92, 200, 240, 0.4), transparent 60%),
+    linear-gradient(180deg, #ddf2fc 0%, #f4f9fd 70%);
+}
+
+/* The small pixel-square motif from the Instagram posts */
+.pixel-motif {
+  width: 28px;
+  height: 42px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 14px 14px no-repeat,
+    linear-gradient(currentColor 0 0) 14px 14px / 14px 14px no-repeat,
+    linear-gradient(currentColor 0 0) 0 28px / 14px 14px no-repeat;
+}
