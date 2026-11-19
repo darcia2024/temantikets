@@ -18,7 +18,7 @@ Back-office mobile-first untuk owner Temantiket: booking tiket CGK - CAI, VOA Me
 | Import | `/admin/import` | Import kontak lama dari `.vcf` HP atau CSV |
 | Form request | `/request` | Form publik untuk customer, lanjut ke WA owner |
 | Papan Mandub | `/mandub/<MANDUB_TOKEN>` | Jadwal kedatangan di Kairo, tanpa login, update status penjemputan |
-| Lacak Order | `/lacak/<kode>` dan `GET /api/lacak/<kode>` | Status VOA untuk customer dan untuk voatemantiket.site |
+| Lacak Order | `/lacak` dan `/lacak/<kode>` | Customer cek status VOA (OK to Board, penjemputan Mandub) pakai kode order |
 | Kwitansi | `/kwitansi/<token>` | Kwitansi digital untuk dikirim lewat WA |
 
 ## Jalankan di laptop
@@ -55,7 +55,9 @@ Catatan Neon:
 - File (PDF, foto) sekarang disimpan di database dan memakan kuota storage Neon. Pindahkan ke Vercel Blob sebelum volumenya besar.
 - Migrasi RLS (`0001`, `0003`) aman di Neon: menutup tabel dari Data API Neon kalau suatu saat diaktifkan.
 
-## Sambungkan Lacak Order di voatemantiket.site
+## API Lacak (opsional)
+
+Lacak Order untuk customer ada di website ini (`/lacak`). Kalau suatu saat situs lain perlu menampilkan status yang sama:
 
 ```js
 const res = await fetch(`https://<APP_URL>/api/lacak/${kode}`);

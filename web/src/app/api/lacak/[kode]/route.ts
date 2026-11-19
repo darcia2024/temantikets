@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { lacakOrder } from "@/lib/lacak";
 
-// Called from voatemantiket.site's "Lacak Order" box:
+// Optional JSON API for other sites (customers use the /lacak page on this site):
 //   fetch("https://<APP_URL>/api/lacak/VOA-2611-AB3K").then(r => r.json())
 function corsHeaders(origin: string | null): HeadersInit {
   const allowed = (process.env.LACAK_ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim());

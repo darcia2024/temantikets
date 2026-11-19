@@ -58,8 +58,11 @@ export default async function MorePage() {
           )}
         </div>
         <div>
-          <p className="font-medium">API Lacak Order untuk voatemantiket.site</p>
-          <code className="block break-all rounded-lg bg-gray-100 p-2 text-xs">GET {appUrl("/api/lacak/VOA-XXXX-XXXX")}</code>
+          <p className="font-medium">Lacak Order VOA (untuk customer)</p>
+          <a className="break-all text-brand-600 underline" href="/lacak" target="_blank">
+            {appUrl("/lacak")}
+          </a>
+          <p className="text-xs text-gray-500">Customer masukkan kode order (VOA-xxxx-xxxx). Link per order juga ikut di pesan konfirmasi VOA.</p>
         </div>
       </Card>
 
