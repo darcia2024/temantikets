@@ -10,6 +10,7 @@ import { newBookingCode, newToken } from "@/lib/codes";
 import { saveUploads } from "@/lib/files";
 import { str } from "@/lib/form";
 import { parseAmount } from "@/lib/money";
+import { awardBookingPoints, reverseBookingPoints } from "@/lib/points";
 import { getSettings } from "@/lib/settings";
 import { bookingNext, bookingStatusMeta } from "@/lib/status";
 import { chargeBooking, convert } from "@/lib/suppliers";
@@ -131,6 +132,7 @@ export async function setBookingStatus(id: number, formData: FormData) {
       if (to === "issued") {
         const note = await chargeBooking(tx, row, settings.rates);
         if (note) warning = note;
+        await awardBookingPoints(tx, row, settings);
       }
       return row;
     });
@@ -165,7 +167,7 @@ export async function uploadBookingFiles(id: number, formData: FormData) {
   const back = `/admin/tiket/${id}`;
   await guard(back, async () => {
     const kind = str(formData, "kind") === "bukti" ? "bukti" : "tiket";
-    const n = await saveUploads(formData, "files", { bookingId: id }, kind);
+    const n = (await saveUploads(formData, "files", { bookingId: id }, kind)).length;
     if (n === 0) fail("Pilih file dulu.");
     await audit("booking", id, `upload:${kind}`, null, { files: n });
     revalidatePath(back);
@@ -285,6 +287,7 @@ export async function updateChange(changeId: number, formData: FormData) {
             .update(schema.bookings)
             .set({ status: "batal", cancelReason: `Refund${c.reason ? `: ${c.reason}` : ""}`, updatedAt: new Date() })
             .where(eq(schema.bookings.id, b.id));
+          await reverseBookingPoints(tx, b);
           if (fees.refundAmount && fees.refundAmount > 0) {
             await tx.insert(schema.payments).values({
               bookingId: b.id,

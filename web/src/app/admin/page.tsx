@@ -64,6 +64,14 @@ export default async function TodayPage() {
   ]);
   const lowSuppliers = suppliers.filter((s) => s.lowBalance != null && (balances.get(s.id) ?? 0) < s.lowBalance);
 
+  const proofs = await db
+    .select({ p: schema.paymentProofs, bookingCode: schema.bookings.code, voaCode: schema.voaOrders.code })
+    .from(schema.paymentProofs)
+    .leftJoin(schema.bookings, eq(schema.bookings.id, schema.paymentProofs.bookingId))
+    .leftJoin(schema.voaOrders, eq(schema.voaOrders.id, schema.paymentProofs.voaId))
+    .where(eq(schema.paymentProofs.status, "menunggu"))
+    .orderBy(asc(schema.paymentProofs.createdAt));
+
   const paidNotIssued = await db
     .select({ b: schema.bookings, name: schema.customers.name })
     .from(schema.bookings)
@@ -79,7 +87,8 @@ export default async function TodayPage() {
   };
   const cashCount = cash.length;
   const nothing =
-    holds.length + requests.length + voas.length + departures.length + paidNotIssued.length + openChanges.length + lowSuppliers.length === 0;
+    holds.length + requests.length + voas.length + departures.length + paidNotIssued.length + openChanges.length + lowSuppliers.length + proofs.length ===
+    0;
 
   return (
     <>
@@ -115,6 +124,23 @@ export default async function TodayPage() {
                 />
               );
             })}
+          </Card>
+        </>
+      )}
+
+      {proofs.length > 0 && (
+        <>
+          <SectionTitle>Bukti transfer perlu dicek ({proofs.length})</SectionTitle>
+          <Card className="divide-y divide-gray-100 overflow-hidden p-0">
+            {proofs.map(({ p, bookingCode, voaCode }) => (
+              <Item
+                key={p.id}
+                href={p.bookingId ? `/admin/tiket/${p.bookingId}` : `/admin/voa/${p.voaId}`}
+                title={`${bookingCode ?? voaCode} · ${fmtMoney(p.amount, p.currency)}`}
+                sub={`${p.payerName ?? "Tanpa nama"} · ${fmtDateTime(p.createdAt)}`}
+                right={<Badge tone="amber">Cek</Badge>}
+              />
+            ))}
           </Card>
         </>
       )}

@@ -19,7 +19,14 @@ export async function processRequest(requestId: number) {
       if (existing) {
         customerId = existing.id;
       } else {
-        const [c] = await db.insert(schema.customers).values({ name: r.name, wa: r.wa, source: "web" }).returning();
+        // A referral only counts for a brand-new customer.
+        const referrer = r.referralCode
+          ? await db.query.customers.findFirst({ where: eq(schema.customers.referralCode, r.referralCode) })
+          : null;
+        const [c] = await db
+          .insert(schema.customers)
+          .values({ name: r.name, wa: r.wa, source: "web", referredById: referrer?.id ?? null })
+          .returning();
         await audit("customer", c.id, "create", null, c);
         customerId = c.id;
       }

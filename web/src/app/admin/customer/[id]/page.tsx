@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { Badge, btn, Card, Empty, Field, Input, PageHeader, SectionTitle, Textarea, WaButton } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
@@ -9,7 +9,19 @@ import { displayWa } from "@/lib/phone";
 import { bookingStatusMeta, voaStatusMeta } from "@/lib/status";
 import { fmtDate, fmtDepart } from "@/lib/time";
 import { passportWarning, waLink } from "@/lib/wa";
-import { addPassenger, deleteCustomer, deletePassenger, updateCustomer, updatePassenger } from "../actions";
+import { ensureReferralCode } from "@/lib/member";
+import { pointBalance, pointHistory, pointKindLabel } from "@/lib/points";
+import {
+  addPassenger,
+  adjustPoints,
+  deleteCustomer,
+  deletePassenger,
+  revokeLogins,
+  sendLoginLink,
+  setReferrer,
+  updateCustomer,
+  updatePassenger,
+} from "../actions";
 import { Flash } from "@/components/flash";
 import { PassengerFields } from "../passenger-fields";
 
@@ -20,11 +32,22 @@ export default async function CustomerPage({ params, searchParams }: PageProps<"
   const db = await getDb();
   const c = await db.query.customers.findFirst({ where: eq(schema.customers.id, id) });
   if (!c) notFound();
-  const [pax, bookings, voas] = await Promise.all([
+  const [pax, bookings, voas, points, pointRows, referrer, referred, refCode] = await Promise.all([
     db.select().from(schema.passengers).where(eq(schema.passengers.customerId, id)),
     db.select().from(schema.bookings).where(eq(schema.bookings.customerId, id)).orderBy(desc(schema.bookings.createdAt)),
     db.select().from(schema.voaOrders).where(eq(schema.voaOrders.customerId, id)).orderBy(desc(schema.voaOrders.createdAt)),
+    pointBalance(id),
+    pointHistory(id, 5),
+    c.referredById ? db.query.customers.findFirst({ where: eq(schema.customers.id, c.referredById) }) : null,
+    db.select({ id: schema.customers.id, name: schema.customers.name }).from(schema.customers).where(eq(schema.customers.referredById, id)),
+    ensureReferralCode(c),
   ]);
+  const passportFiles = pax.length
+    ? await db
+        .select({ passengerId: schema.files.passengerId, shareToken: schema.files.shareToken, filename: schema.files.filename })
+        .from(schema.files)
+        .where(inArray(schema.files.passengerId, pax.map((p) => p.id)))
+    : [];
 
   return (
     <>
@@ -43,6 +66,66 @@ export default async function CustomerPage({ params, searchParams }: PageProps<"
           <Link href={`/admin/voa/baru?customer=${c.id}`} className={btn.secondary}>
             + Order VOA
           </Link>
+        </div>
+      </Card>
+
+      <SectionTitle>Akun member</SectionTitle>
+      <Card className="space-y-3 text-sm">
+        <p className="text-gray-600">Customer masuk lewat link sekali pakai yang dikirim ke WA-nya (berlaku 7 hari), lalu bisa lihat order, kirim bukti transfer, dan data paspor.</p>
+        <div className="flex flex-wrap gap-2">
+          <form action={sendLoginLink.bind(null, c.id)}>
+            <SubmitButton variant="wa">Kirim link login via WA</SubmitButton>
+          </form>
+          <form action={revokeLogins.bind(null, c.id)}>
+            <SubmitButton variant="danger" confirm="Keluarkan customer ini dari semua HP yang sudah login?">
+              Cabut akses
+            </SubmitButton>
+          </form>
+        </div>
+      </Card>
+
+      <SectionTitle>Poin & ajak teman</SectionTitle>
+      <Card className="space-y-3 text-sm">
+        <div className="flex items-baseline justify-between">
+          <span className="text-gray-600">Saldo poin</span>
+          <span className="text-xl font-bold text-brand-700">{points.toLocaleString("id-ID")}</span>
+        </div>
+        {pointRows.length > 0 && (
+          <ul className="divide-y divide-gray-100 text-xs">
+            {pointRows.map((r) => (
+              <li key={r.id} className="flex justify-between py-1.5">
+                <span>
+                  {pointKindLabel[r.kind] ?? r.kind} {r.note && <span className="text-gray-500">· {r.note}</span>}
+                </span>
+                <span className={r.points > 0 ? "text-emerald-700" : "text-red-700"}>
+                  {r.points > 0 ? "+" : ""}
+                  {r.points}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form action={adjustPoints.bind(null, c.id)} className="grid grid-cols-[auto_5rem_1fr_auto] items-end gap-2">
+          <select name="kind" className="rounded-xl px-2 py-2.5 ring-1 ring-gray-300" defaultValue="tukar">
+            <option value="tukar">Tukar</option>
+            <option value="koreksi">Koreksi ±</option>
+          </select>
+          <Input name="points" inputMode="numeric" placeholder="50" required />
+          <Input name="note" placeholder="Catatan, mis. potongan TT-..." />
+          <SubmitButton variant="secondary">Catat</SubmitButton>
+        </form>
+        <div className="border-t border-gray-100 pt-3">
+          <p>
+            Kode ajakan: <span className="font-mono font-semibold">{refCode}</span>
+            {referred.length > 0 && <span className="text-gray-500"> · mengajak {referred.map((r) => r.name).join(", ")}</span>}
+          </p>
+          <form action={setReferrer.bind(null, c.id)} className="mt-2 flex gap-2">
+            <Input name="code" defaultValue={referrer?.referralCode ?? ""} placeholder="Kode pengajak" className="uppercase" />
+            <SubmitButton variant="secondary">Simpan</SubmitButton>
+          </form>
+          <p className="mt-1 text-xs text-gray-500">
+            {referrer ? `Diajak oleh ${referrer.name}.` : "Belum ada pengajak."} Pengajak dapat bonus saat order pertama customer ini jadi.
+          </p>
         </div>
       </Card>
 
@@ -66,6 +149,13 @@ export default async function CustomerPage({ params, searchParams }: PageProps<"
                     Paspor {p.passportNo ?? "-"} · berlaku s/d {fmtDate(p.passportExpiry)}
                   </p>
                   {warn && <p className="mt-1 text-xs font-medium text-red-700">{warn}</p>}
+                  {passportFiles
+                    .filter((f) => f.passengerId === p.id)
+                    .map((f) => (
+                      <a key={f.shareToken} href={`/f/${f.shareToken}`} target="_blank" className="mr-2 text-xs text-brand-600 underline">
+                        Foto paspor: {f.filename}
+                      </a>
+                    ))}
                 </summary>
                 <form action={updatePassenger.bind(null, p.id)} className="mt-3 space-y-3">
                   <PassengerFields p={p} />

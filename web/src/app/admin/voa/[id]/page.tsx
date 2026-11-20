@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { PaymentsSection } from "@/components/payments-section";
+import { ProofsSection } from "@/components/proofs-section";
 import { SubmitButton } from "@/components/submit-button";
 import { Badge, Card, Empty, Input, PageHeader, Row, SectionTitle, WaButton } from "@/components/ui";
 import { deleteFile } from "@/app/admin/tiket/actions";
@@ -23,7 +24,13 @@ const errors: Record<string, string> = {
   nominal: "Nominal pembayaran tidak valid.",
 };
 
-const fileKindLabel: Record<string, string> = { otb: "OK to Board", boarding: "Foto hari H", bukti: "Bukti bayar", lainnya: "Lainnya" };
+const fileKindLabel: Record<string, string> = {
+  otb: "OK to Board",
+  boarding: "Foto hari H",
+  bukti: "Bukti bayar",
+  dokumen: "Dokumen dari customer",
+  lainnya: "Lainnya",
+};
 
 export default async function VoaPage({ params, searchParams }: PageProps<"/admin/voa/[id]">) {
   const id = idParam((await params).id);
@@ -182,7 +189,7 @@ export default async function VoaPage({ params, searchParams }: PageProps<"/admi
         )}
       </Card>
 
-      <SectionTitle>File (OK to Board, foto hari H)</SectionTitle>
+      <SectionTitle>File (OK to Board, dokumen, foto hari H)</SectionTitle>
       <Card className="space-y-3">
         {v.status === "otb_terbit" && otbLinks.length === 0 && <Empty>Upload file OK to Board supaya bisa dikirim ke customer.</Empty>}
         {fileRows.length === 0 ? (
@@ -218,6 +225,8 @@ export default async function VoaPage({ params, searchParams }: PageProps<"/admi
           <SubmitButton variant="secondary">Upload</SubmitButton>
         </form>
       </Card>
+
+      <ProofsSection target={{ voaId: id }} back={back} customer={customer} code={v.code} defaultKind={suggestedKind} />
 
       <PaymentsSection
         target={{ voaId: id }}

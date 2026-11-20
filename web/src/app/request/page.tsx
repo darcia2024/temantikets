@@ -6,6 +6,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { Card, Field, Input, Select, Textarea } from "@/components/ui";
 import { newRequestCode } from "@/lib/codes";
 import { int, str } from "@/lib/form";
+import { normalizeReferralCode } from "@/lib/member";
 import { normalizeWa } from "@/lib/phone";
 
 export const metadata = {
@@ -37,12 +38,14 @@ async function submitRequest(formData: FormData) {
     priority: ["termurah", "bagasi", "tercepat", "maskapai"].includes(priority) ? priority : "termurah",
     wantsVoa: formData.get("wantsVoa") === "on",
     notes: str(formData, "notes")?.slice(0, 1000) ?? null,
+    referralCode: normalizeReferralCode(str(formData, "ref")),
   });
   redirect(`/request/terkirim?kode=${code}`);
 }
 
 export default async function RequestPage({ searchParams }: PageProps<"/request">) {
   const sp = await searchParams;
+  const ref = normalizeReferralCode(typeof sp.ref === "string" ? sp.ref : null);
   const today = new Date().toISOString().slice(0, 10);
   return (
     <main className="bg-sky-hero min-h-dvh">
@@ -107,6 +110,9 @@ export default async function RequestPage({ searchParams }: PageProps<"/request"
           </label>
           <Field label="Catatan">
             <Textarea name="notes" placeholder="Maba / mahasiswa lama, maskapai favorit, bagasi tambahan..." />
+          </Field>
+          <Field label="Kode ajakan teman (opsional)">
+            <Input name="ref" defaultValue={ref ?? ""} className="uppercase" autoCapitalize="characters" maxLength={12} />
           </Field>
           <SubmitButton className="w-full">Kirim request</SubmitButton>
         </form>

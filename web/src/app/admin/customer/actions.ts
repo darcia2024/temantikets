@@ -6,7 +6,10 @@ import { getDb, schema } from "@/db";
 import { audit, fail, guard } from "@/lib/action";
 import { requireOwner } from "@/lib/auth";
 import { bool, reqStr, str } from "@/lib/form";
+import { createLoginLink, normalizeReferralCode, revokeMemberSessions } from "@/lib/member";
 import { normalizeWa } from "@/lib/phone";
+import { pointBalance } from "@/lib/points";
+import { waLink } from "@/lib/wa";
 
 function customerFields(formData: FormData) {
   const wa = normalizeWa(str(formData, "wa"));
@@ -65,6 +68,84 @@ export async function deleteCustomer(id: number) {
     revalidatePath("/admin/customer");
     return `/admin/customer?ok=${encodeURIComponent(`${before.name} dihapus.`)}`;
   });
+}
+
+// ---------- Member area ----------
+
+/** Creates a one-time login link and opens WhatsApp with it, so the link never sits in a URL or log here. */
+export async function sendLoginLink(customerId: number) {
+  await requireOwner();
+  const back = `/admin/customer/${customerId}`;
+  await guard(back, async () => {
+    const db = await getDb();
+    const c = await db.query.customers.findFirst({ where: eq(schema.customers.id, customerId) });
+    if (!c) fail("Customer tidak ditemukan.");
+    const link = await createLoginLink(c.id);
+    await audit("customer", c.id, "login_link", null, { expiresInDays: 7 });
+    return waLink(
+      c.wa,
+      `Assalamualaikum ${c.name}, ini link masuk ke akun Temantiket kamu:\n${link}\n\n` +
+        `Di sana kamu bisa lihat e-ticket, OK to Board, poin, dan kirim bukti transfer. ` +
+        `Link berlaku 7 hari dan hanya untuk kamu, jangan diteruskan ya.\n\nSalam,\nTemantiket`,
+    );
+  });
+}
+
+export async function revokeLogins(customerId: number) {
+  await requireOwner();
+  await guard(
+    `/admin/customer/${customerId}`,
+    async () => {
+      await revokeMemberSessions(customerId);
+      await audit("customer", customerId, "revoke_logins", null, null);
+    },
+    "Semua sesi login customer ini dikeluarkan.",
+  );
+}
+
+export async function adjustPoints(customerId: number, formData: FormData) {
+  await requireOwner();
+  const back = `/admin/customer/${customerId}`;
+  await guard(
+    back,
+    async () => {
+      const kind = str(formData, "kind") === "koreksi" ? "koreksi" : "tukar";
+      const raw = Math.trunc(Number(str(formData, "points")));
+      if (!Number.isFinite(raw) || raw === 0) fail("Isi jumlah poin.");
+      // "Tukar" always spends; "koreksi" may go either way.
+      const points = kind === "tukar" ? -Math.abs(raw) : raw;
+      const balance = await pointBalance(customerId);
+      if (balance + points < 0) fail(`Poin tidak cukup. Saldo sekarang ${balance}.`);
+      const db = await getDb();
+      const [row] = await db
+        .insert(schema.pointLedger)
+        .values({ customerId, kind, points, note: str(formData, "note")?.slice(0, 200) ?? null })
+        .returning();
+      await audit("points", row.id, "create", null, row);
+      revalidatePath(back);
+    },
+    "Poin dicatat.",
+  );
+}
+
+export async function setReferrer(customerId: number, formData: FormData) {
+  await requireOwner();
+  const back = `/admin/customer/${customerId}`;
+  await guard(
+    back,
+    async () => {
+      const db = await getDb();
+      const code = normalizeReferralCode(str(formData, "code"));
+      const referrer = code ? await db.query.customers.findFirst({ where: eq(schema.customers.referralCode, code) }) : null;
+      if (str(formData, "code") && !referrer) fail("Kode ajakan tidak ditemukan.");
+      if (referrer?.id === customerId) fail("Customer tidak bisa mengajak dirinya sendiri.");
+      const before = await db.query.customers.findFirst({ where: eq(schema.customers.id, customerId) });
+      await db.update(schema.customers).set({ referredById: referrer?.id ?? null }).where(eq(schema.customers.id, customerId));
+      await audit("customer", customerId, "referrer", { referredById: before?.referredById ?? null }, { referredById: referrer?.id ?? null });
+      revalidatePath(back);
+    },
+    "Pengajak disimpan.",
+  );
 }
 
 function passengerFields(formData: FormData) {

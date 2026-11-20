@@ -10,6 +10,7 @@ import { newVoaCode } from "@/lib/codes";
 import { saveUploads } from "@/lib/files";
 import { bool, int, str } from "@/lib/form";
 import { parseAmount } from "@/lib/money";
+import { awardVoaPoints } from "@/lib/points";
 import { getSettings, voaTierFor } from "@/lib/settings";
 import { voaNext, voaStatusMeta } from "@/lib/status";
 import { localToUtc, TZ_CAIRO } from "@/lib/time";
@@ -122,6 +123,7 @@ export async function setVoaStatus(id: number, formData: FormData) {
     const cancelReason = str(formData, "cancelReason");
     if (to === "batal" && !cancelReason) fail("Isi alasan batal dulu.");
     const now = new Date();
+    const settings = await getSettings();
     const [after] = await db
       .update(schema.voaOrders)
       .set({
@@ -134,6 +136,7 @@ export async function setVoaStatus(id: number, formData: FormData) {
       })
       .where(eq(schema.voaOrders.id, id))
       .returning();
+    if (to === "lunas") await db.transaction((tx) => awardVoaPoints(tx, after, settings));
     await audit("voa", id, `status:${v.status}->${to}`, { status: v.status }, { status: after.status, cancelReason: after.cancelReason });
     revalidatePath(back);
     revalidatePath("/admin");
@@ -163,7 +166,7 @@ export async function uploadVoaFiles(id: number, formData: FormData) {
   await guard(back, async () => {
     const k = str(formData, "kind");
     const kind = k === "otb" || k === "boarding" || k === "bukti" ? k : "lainnya";
-    const n = await saveUploads(formData, "files", { voaId: id }, kind);
+    const n = (await saveUploads(formData, "files", { voaId: id }, kind)).length;
     if (n === 0) fail("Pilih file dulu.");
     await audit("voa", id, `upload:${kind}`, null, { files: n });
     revalidatePath(back);

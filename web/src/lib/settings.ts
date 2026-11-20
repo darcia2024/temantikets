@@ -9,6 +9,20 @@ export type Settings = {
   voaTiers: VoaTier[];
   /** People who may hold EGP cash on behalf of Temantiket */
   cashHolders: string[];
+  /** Shown on pay links and in the member area. Free text, one account per line. */
+  bankAccounts: string;
+  points: PointRules;
+};
+
+export type PointRules = {
+  /** 1 point for every this many Rupiah of ticket margin */
+  idrPerPoint: number;
+  /** Points per person on a paid-off VOA order */
+  voaPerPax: number;
+  /** Points for the referrer when a friend's first order is issued */
+  referralBonus: number;
+  /** What 1 point is worth when redeemed, in Rupiah */
+  pointValueIdr: number;
 };
 
 // Tariffs from voatemantiket.site (Nov 2026). Grup 12+ is negotiated.
@@ -21,12 +35,16 @@ export const DEFAULT_SETTINGS: Settings = {
     { label: "Grup besar", minPax: 13, maxPax: null, rateUsd: null },
   ],
   cashHolders: ["owner"],
+  bankAccounts: "",
+  // Defaults: Rp500.000 margin = 50 points = Rp5.000; a referral = Rp10.000.
+  points: { idrPerPoint: 10000, voaPerPax: 20, referralBonus: 100, pointValueIdr: 100 },
 };
 
 export async function getSettings(): Promise<Settings> {
   const db = await getDb();
   const row = await db.query.settings.findFirst({ where: eq(schema.settings.key, "app") });
-  return { ...DEFAULT_SETTINGS, ...((row?.value as Partial<Settings>) ?? {}) };
+  const saved = (row?.value as Partial<Settings>) ?? {};
+  return { ...DEFAULT_SETTINGS, ...saved, points: { ...DEFAULT_SETTINGS.points, ...saved.points } };
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<void> {

@@ -24,7 +24,7 @@ describe("file upload", () => {
   it("stores a PDF e-ticket and serves it by share link", async () => {
     const fd = new FormData();
     fd.append("files", new File([pdfBytes], "eticket ahmad.pdf", { type: "application/pdf" }));
-    expect(await saveUploads(fd, "files", { bookingId }, "tiket")).toBe(1);
+    expect(await saveUploads(fd, "files", { bookingId }, "tiket")).toHaveLength(1);
 
     const db = await getDb();
     const [f] = await db.select().from(schema.files);
@@ -41,7 +41,7 @@ describe("file upload", () => {
   it("ignores empty file inputs", async () => {
     const fd = new FormData();
     fd.append("files", new File([], "", { type: "application/octet-stream" }));
-    expect(await saveUploads(fd, "files", { bookingId }, "tiket")).toBe(0);
+    expect(await saveUploads(fd, "files", { bookingId }, "tiket")).toHaveLength(0);
   });
 
   it("rejects non-PDF/photo files and files over 10 MB", async () => {

@@ -21,6 +21,23 @@ Back-office mobile-first untuk owner Temantiket: booking tiket CGK - CAI, VOA Me
 | Lacak Order | `/lacak` dan `/lacak/<kode>` | Customer cek status VOA (OK to Board, penjemputan Mandub) pakai kode order |
 | Kwitansi | `/kwitansi/<token>` | Kwitansi digital untuk dikirim lewat WA |
 
+## Fase 1: self-service customer
+
+| Bagian | URL | Untuk |
+| --- | --- | --- |
+| Akun member | `/akun` | Customer lihat tiket & e-ticket, OK to Board, sisa tagihan, kirim dokumen VOA & foto hari H |
+| Login | `/masuk/<token>` | Link sekali pakai (7 hari) yang owner kirim dari halaman customer → "Kirim link login via WA". Tanpa password |
+| Penumpang | `/akun/penumpang` | Customer simpan/ubah data paspor sendiri + upload foto paspor |
+| Poin & ajak teman | `/akun/poin` | Saldo poin, riwayat, kode ajakan + link `/request?ref=KODE` |
+| Link bayar | `/bayar/<token>` | Tanpa login, bisa diteruskan ke orang tua. Lihat sisa tagihan + upload bukti transfer |
+| Verifikasi bukti | detail tiket/VOA, Hari ini | Owner terima (jadi pembayaran + kwitansi) atau tolak dengan alasan |
+| Pengaturan | `/admin/lainnya` | Rekening yang tampil di link bayar, aturan poin |
+
+Aturan poin (bisa diubah): 1 poin tiap Rp10.000 margin tiket (masuk saat Issued), 20 poin per orang VOA (saat Lunas),
+100 poin untuk pengajak saat order pertama teman jadi, 1 poin = Rp100. Refund menarik poin tiketnya. Tukar poin dicatat owner di halaman customer.
+
+Halaman publik (link bayar, akun) hanya menampilkan pesan dari daftar tetap (`public-flash.tsx`), jadi link palsu berisi `?error=transfer ke rekening X` tidak bisa memunculkan teks itu.
+
 ## Jalankan di laptop
 
 ```powershell

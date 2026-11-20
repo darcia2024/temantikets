@@ -5,6 +5,7 @@ import { Flash } from "@/components/flash";
 import { ChangesSection } from "./changes-section";
 import { getDb, schema } from "@/db";
 import { PaymentsSection } from "@/components/payments-section";
+import { ProofsSection } from "@/components/proofs-section";
 import { SubmitButton } from "@/components/submit-button";
 import { Badge, Card, Empty, Input, PageHeader, Row, SectionTitle, WaButton } from "@/components/ui";
 import { idParam } from "@/lib/form";
@@ -218,6 +219,10 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
       </Card>
 
       <ChangesSection booking={b} changes={changes} hasSupplier={!!b.supplierId} />
+
+      {b.status !== "penawaran" && (
+        <ProofsSection target={{ bookingId: id }} back={back} customer={customer} code={b.code} defaultKind="penuh" />
+      )}
 
       <PaymentsSection
         target={{ bookingId: id }}

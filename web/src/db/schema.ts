@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -70,9 +71,34 @@ export const customers = pgTable(
     waParent: text("wa_parent"),
     notes: text("notes"),
     source: text("source").notNull().default("manual"),
+    // Member area (Fase 1). Code is created the first time it is needed.
+    referralCode: text("referral_code"),
+    referredById: fk("referred_by_id").references((): AnyPgColumn => customers.id, { onDelete: "set null" }),
+    // Bumped to sign the customer out of every device.
+    loginVersion: integer("login_version").notNull().default(0),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("customers_wa_key").on(t.wa)],
+  (t) => [
+    uniqueIndex("customers_wa_key").on(t.wa),
+    uniqueIndex("customers_referral_code_key").on(t.referralCode),
+    index("customers_referred_by_id_idx").on(t.referredById),
+  ],
+);
+
+// One-time login links sent to customers over WhatsApp. Only a hash is stored.
+export const memberLogins = pgTable(
+  "member_logins",
+  {
+    id: id(),
+    customerId: fk("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: ts("expires_at").notNull(),
+    usedAt: ts("used_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("member_logins_token_hash_key").on(t.tokenHash), index("member_logins_customer_id_idx").on(t.customerId)],
 );
 
 export const passengers = pgTable(
@@ -108,6 +134,8 @@ export const ticketRequests = pgTable(
     priority: text("priority").notNull().default("termurah"),
     wantsVoa: boolean("wants_voa").notNull().default(false),
     notes: text("notes"),
+    // Referral code typed in or carried by a friend's link (/request?ref=CODE)
+    referralCode: text("referral_code"),
     status: text("status").notNull().default("baru"),
     createdAt: createdAt(),
   },
@@ -144,11 +172,14 @@ export const bookings = pgTable(
     ticketNumbers: text("ticket_numbers"),
     cancelReason: text("cancel_reason"),
     notes: text("notes"),
+    // Public "pay this order" link (e.g. for parents). Created on first use.
+    payToken: text("pay_token"),
     createdAt: createdAt(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("bookings_code_key").on(t.code),
+    uniqueIndex("bookings_pay_token_key").on(t.payToken),
     index("bookings_customer_id_idx").on(t.customerId),
     index("bookings_request_id_idx").on(t.requestId),
     index("bookings_supplier_id_idx").on(t.supplierId),
@@ -199,11 +230,13 @@ export const voaOrders = pgTable(
     mandubNote: text("mandub_note"),
     cancelReason: text("cancel_reason"),
     notes: text("notes"),
+    payToken: text("pay_token"),
     createdAt: createdAt(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("voa_orders_code_key").on(t.code),
+    uniqueIndex("voa_orders_pay_token_key").on(t.payToken),
     index("voa_orders_customer_id_idx").on(t.customerId),
     index("voa_orders_booking_id_idx").on(t.bookingId),
     index("voa_orders_arrival_at_idx").on(t.arrivalAt),
@@ -229,6 +262,9 @@ export const voaPassengers = pgTable(
   ],
 );
 
+export const FILE_KINDS = ["tiket", "otb", "bukti", "boarding", "paspor", "dokumen", "lainnya"] as const;
+export type FileKind = (typeof FILE_KINDS)[number];
+
 // Files are stored in the database for Fase 0 (small PDFs/photos). Move to
 // object storage (e.g. Vercel Blob) once volume grows; the `files` API stays the same.
 export const files = pgTable(
@@ -238,6 +274,10 @@ export const files = pgTable(
     kind: text("kind").notNull(),
     bookingId: fk("booking_id").references(() => bookings.id, { onDelete: "cascade" }),
     voaId: fk("voa_id").references(() => voaOrders.id, { onDelete: "cascade" }),
+    // Passport photos belong to a saved passenger.
+    passengerId: fk("passenger_id").references(() => passengers.id, { onDelete: "cascade" }),
+    // "owner", "member" (customer area) or "link" (public pay link)
+    uploadedBy: text("uploaded_by").notNull().default("owner"),
     filename: text("filename").notNull(),
     mime: text("mime").notNull(),
     size: integer("size").notNull(),
@@ -250,7 +290,8 @@ export const files = pgTable(
     uniqueIndex("files_share_token_key").on(t.shareToken),
     index("files_booking_id_idx").on(t.bookingId),
     index("files_voa_id_idx").on(t.voaId),
-    check("files_kind_check", inList("kind", ["tiket", "otb", "bukti", "boarding", "lainnya"])),
+    index("files_passenger_id_idx").on(t.passengerId),
+    check("files_kind_check", inList("kind", FILE_KINDS)),
     check("files_size_check", sql`size <= 10485760`),
   ],
 );
@@ -281,6 +322,77 @@ export const payments = pgTable(
     check("payments_method_check", inList("method", ["transfer", "tunai", "gateway"])),
     check("payments_currency_check", inList("currency", CURRENCIES)),
     check("payments_amount_check", sql`amount > 0`),
+  ],
+);
+
+export const PROOF_STATUS = ["menunggu", "diterima", "ditolak"] as const;
+
+// Transfer receipts uploaded by customers (member area or pay link), verified by the owner.
+export const paymentProofs = pgTable(
+  "payment_proofs",
+  {
+    id: id(),
+    bookingId: fk("booking_id").references(() => bookings.id, { onDelete: "cascade" }),
+    voaId: fk("voa_id").references(() => voaOrders.id, { onDelete: "cascade" }),
+    fileId: fk("file_id")
+      .notNull()
+      .references(() => files.id, { onDelete: "cascade" }),
+    currency: text("currency").$type<Currency>().notNull().default("IDR"),
+    amount: money("amount").notNull(),
+    payerName: text("payer_name"),
+    note: text("note"),
+    source: text("source").notNull(),
+    status: text("status").notNull().default("menunggu"),
+    paymentId: fk("payment_id").references(() => payments.id, { onDelete: "set null" }),
+    rejectReason: text("reject_reason"),
+    reviewedAt: ts("reviewed_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("payment_proofs_booking_id_idx").on(t.bookingId),
+    index("payment_proofs_voa_id_idx").on(t.voaId),
+    index("payment_proofs_file_id_idx").on(t.fileId),
+    index("payment_proofs_payment_id_idx").on(t.paymentId),
+    index("payment_proofs_status_idx").on(t.status),
+    check("payment_proofs_target_check", sql`num_nonnulls(booking_id, voa_id) = 1`),
+    check("payment_proofs_status_check", inList("status", PROOF_STATUS)),
+    check("payment_proofs_source_check", inList("source", ["member", "link"])),
+    check("payment_proofs_currency_check", inList("currency", CURRENCIES)),
+    check("payment_proofs_amount_check", sql`amount > 0`),
+  ],
+);
+
+export const POINT_KIND = ["belanja", "referral", "tukar", "koreksi", "batal"] as const;
+export type PointKind = (typeof POINT_KIND)[number];
+
+// Loyalty points. Signed: positive earns, negative spends or reverses.
+export const pointLedger = pgTable(
+  "point_ledger",
+  {
+    id: id(),
+    customerId: fk("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<PointKind>().notNull(),
+    points: integer("points").notNull(),
+    bookingId: fk("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    voaId: fk("voa_id").references(() => voaOrders.id, { onDelete: "set null" }),
+    // For referral bonuses: the friend who was referred.
+    refereeId: fk("referee_id").references(() => customers.id, { onDelete: "set null" }),
+    note: text("note"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("point_ledger_customer_id_idx").on(t.customerId),
+    index("point_ledger_booking_id_idx").on(t.bookingId),
+    index("point_ledger_voa_id_idx").on(t.voaId),
+    index("point_ledger_referee_id_idx").on(t.refereeId),
+    // Each order earns (or is reversed) once; each friend pays a referral bonus once.
+    uniqueIndex("point_ledger_booking_kind_key").on(t.bookingId, t.kind).where(sql`booking_id is not null and kind in ('belanja', 'batal')`),
+    uniqueIndex("point_ledger_voa_kind_key").on(t.voaId, t.kind).where(sql`voa_id is not null and kind in ('belanja', 'batal')`),
+    uniqueIndex("point_ledger_referee_key").on(t.refereeId).where(sql`kind = 'referral'`),
+    check("point_ledger_kind_check", inList("kind", POINT_KIND)),
+    check("point_ledger_points_check", sql`points <> 0`),
   ],
 );
 

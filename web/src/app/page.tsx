@@ -125,6 +125,7 @@ export default async function Home() {
               <a href="#tiket">Tiket</a>
               <a href="#voa">VOA</a>
               <a href="#lacak">Lacak</a>
+              <Link href="/akun">Akun</Link>
             </nav>
           </div>
           <div className="py-12">
@@ -284,6 +285,7 @@ export default async function Home() {
             </a>
             <Link href="/request">Request tiket</Link>
             <a href="#lacak">Lacak order VOA</a>
+            <Link href="/akun">Akun saya</Link>
           </div>
           <p className="mt-8 text-xs text-white/60">© {new Date().getFullYear()} Temantiket</p>
         </div>

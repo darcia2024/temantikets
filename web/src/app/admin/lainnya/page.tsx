@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Card, PageHeader, SectionTitle } from "@/components/ui";
+import { Card, Field, Input, PageHeader, SectionTitle, Textarea } from "@/components/ui";
+import { Flash } from "@/components/flash";
 import { SubmitButton } from "@/components/submit-button";
+import { updateMemberSettings } from "@/app/admin/kas/actions";
 import { destroySession, requireOwner } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { appUrl } from "@/lib/wa";
@@ -24,12 +26,14 @@ const links = [
   { href: "/admin/audit", title: "Audit log", sub: "Siapa mengubah apa dan kapan" },
 ];
 
-export default async function MorePage() {
+export default async function MorePage({ searchParams }: PageProps<"/admin/lainnya">) {
+  const sp = await searchParams;
   const settings = await getSettings();
   const mandubToken = process.env.MANDUB_TOKEN;
   return (
     <>
       <PageHeader title="Lainnya" />
+      <Flash sp={sp} />
       <Card className="divide-y divide-gray-100 p-0">
         {links.map((l) => (
           <Link key={l.href} href={l.href} className="block px-4 py-3 hover:bg-gray-50">
@@ -64,6 +68,40 @@ export default async function MorePage() {
           </a>
           <p className="text-xs text-gray-500">Customer masukkan kode order (VOA-xxxx-xxxx). Link per order juga ikut di pesan konfirmasi VOA.</p>
         </div>
+        <div>
+          <p className="font-medium">Akun member (untuk customer)</p>
+          <a className="break-all text-brand-600 underline" href="/akun" target="_blank">
+            {appUrl("/akun")}
+          </a>
+          <p className="text-xs text-gray-500">Customer masuk lewat link login yang lo kirim dari halaman customer (tombol &quot;Kirim link login via WA&quot;).</p>
+        </div>
+      </Card>
+
+      <SectionTitle>Akun member, link bayar & poin</SectionTitle>
+      <Card>
+        <form action={updateMemberSettings} className="space-y-3">
+          <Field label="Rekening untuk transfer" hint="Tampil di link bayar. Satu rekening per baris. Kosongkan kalau rekening hanya diberikan lewat chat.">
+            <Textarea name="bankAccounts" rows={3} defaultValue={settings.bankAccounts} placeholder={"BSI 1234567890 a.n. Temantiket\nBCA 0987654321 a.n. ..."} />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="1 poin tiap margin (Rp)">
+              <Input name="idrPerPoint" inputMode="numeric" defaultValue={settings.points.idrPerPoint} />
+            </Field>
+            <Field label="Nilai 1 poin (Rp)">
+              <Input name="pointValueIdr" inputMode="numeric" defaultValue={settings.points.pointValueIdr} />
+            </Field>
+            <Field label="Poin VOA per orang">
+              <Input name="voaPerPax" inputMode="numeric" defaultValue={settings.points.voaPerPax} />
+            </Field>
+            <Field label="Bonus ajak teman (poin)">
+              <Input name="referralBonus" inputMode="numeric" defaultValue={settings.points.referralBonus} />
+            </Field>
+          </div>
+          <p className="text-xs text-gray-500">
+            Poin tiket masuk saat Issued, poin VOA saat Lunas, bonus ajak teman saat order pertama teman jadi. Refund menarik kembali poin tiketnya.
+          </p>
+          <SubmitButton variant="secondary">Simpan</SubmitButton>
+        </form>
       </Card>
 
       <SectionTitle>Tarif VOA</SectionTitle>
